@@ -1,5 +1,9 @@
 # RelatorioAD
 
+[![Baixar RelatorioAD.zip](https://img.shields.io/badge/BAIXAR-RelatorioAD.zip-2ea44f?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/nandofalves/RelatorioAD/raw/main/dist/RelatorioAD.zip)
+
+O zip tem o `RelatorioAD.exe` e o `RelatorioAD.exe.config`: extraia os dois na mesma pasta do servidor e abra o `.exe` (veja [Como usar](#como-usar)).
+
 Programa para Windows Server que gera, em poucos cliques, um **relatório em HTML dos usuários ativos do Active Directory e de quem acessa cada pasta compartilhada da rede**, com as permissões de compartilhamento e NTFS já cruzadas por usuário.
 
 Roda do **Windows Server 2008 R2 ao 2025** com um único `.exe`, sem instalação e sem dependências.
