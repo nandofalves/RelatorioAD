@@ -64,3 +64,10 @@
 - Os passos 1 a 3 já funcionaram no 2008 R2 (AD, compartilhamentos via WMI, ACLs). Falta confirmar os passos 4 e 5 (HTML) com o novo .exe.
 - **2º teste: mesmo erro.** O `@(...)` no `foreach` não basta quando a variável já é `$null`: lista vazia atribuída a variável vira `$null`, e `@($null)` tem **1** item. Caso real: ACE de **usuário desabilitado** (`Tipo = 'usuario'`, `Users` vazio) → `$alvo = ... else { @() }` = `$null`. Correção na base PS2: `$alvo = @(if ... )`, com os ramos devolvendo os valores sem `@()` (ramo vazio = 0 itens). As outras atribuições `= if` guardam escalares, e os pipelines partem de `@()`, de coleções ou vêm depois de um teste de `.Count`.
 - Não dá para testar no PS 2.0 aqui: o Windows 11 (26200) não tem mais o motor 2.0 (`-Version 2` cai no 5.1). Novo SHA256 no `ENTREGA.md` (exe `3E3817C8…23AF`).
+
+## 2026-10-27 — Feature 001 (auditoria do domínio), Fase 1 do SDD (PRD)
+- Pedido: comparação com o levantamento anterior, contas privilegiadas/de risco no domínio, política de senha, GPOs e computadores, todos **opcionais** (caixas desmarcadas por padrão).
+- Decisões do usuário: comparação automática + escolha de arquivo; contas de serviço por SPN + padrão de nome; referência = Microsoft Security Baseline; mesmo HTML, com novas seções.
+- `docs/features/001-auditoria-dominio/PRD.md` gerado (rascunho). Proposta: módulos escritos uma vez em `scripts/Modulos.ps1` (PS 2.0) e embutidos pelo build nas 3 bases.
+- PRD aprovado (bloqueio: alerta só em 0 e > 10; snapshot sempre gravado).
+- Próximo passo: `/clear` → gerar a Spec em `docs/features/001-auditoria-dominio/Spec.md`.
