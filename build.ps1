@@ -53,14 +53,30 @@ foreach ($d in @((Join-Path $raiz 'build'), $dirDist)) {
 # 1. Scripts por versão
 Etapa '1. Gerando scripts por versão'
 $padrao = "(?m)^(\s*\[string\]\`$VersaoSO\s*=\s*)''"
+# Módulos opcionais: sem o BOM (o ReadAllText já tira) e sem a linha #Requires, com quebras \r\n
+$modulos = [IO.File]::ReadAllText((Join-Path $raiz 'scripts\Modulos.ps1'), [Text.Encoding]::UTF8)
+$modulos = $modulos -replace '(?m)^#Requires.*(\r?\n)?', ''
+$modulos = ($modulos -replace "`r`n", "`n") -replace "`n", "`r`n"
+if (-not $modulos.EndsWith("`r`n")) { $modulos += "`r`n" }
+$regIni = '#region MODULOS'
+$regFim = '#endregion MODULOS'
 foreach ($v in $versoes) {
     $base = Join-Path $raiz "scripts\$($v.Base)"
     $txt  = [IO.File]::ReadAllText($base, [Text.Encoding]::UTF8)
     $n    = ([regex]::Matches($txt, $padrao)).Count
     if ($n -ne 1) { throw "$($v.Base): esperado 1 parâmetro `$VersaoSO = '' e foram encontrados $n" }
     $txt = [regex]::Replace($txt, $padrao, "`${1}'$($v.Rotulo)'")
+    # Embute o Modulos.ps1 entre as marcas (IndexOf/Substring: o $ do código quebraria um regex replace)
+    foreach ($m in @($regIni, $regFim)) {
+        $n = ([regex]::Matches($txt, "(?m)^$([regex]::Escape($m))\s*$")).Count
+        if ($n -ne 1) { throw "$($v.Base): esperado 1 '$m' e foram encontrados $n" }
+    }
+    $iIni = $txt.IndexOf("`n", $txt.IndexOf($regIni)) + 1
+    $iFim = $txt.IndexOf($regFim)
+    if ($iFim -lt $iIni) { throw "$($v.Base): '$regFim' antes de '$regIni'" }
+    $txt = $txt.Substring(0, $iIni) + $modulos + $txt.Substring($iFim)
     [IO.File]::WriteAllText((ScriptDe $v), $txt, $utf8Bom)
-    Write-Host "  Relatorio-$($v.Id).ps1  ← $($v.Base)  (VersaoSO = '$($v.Rotulo)')"
+    Write-Host "  Relatorio-$($v.Id).ps1  ← $($v.Base)  (VersaoSO = '$($v.Rotulo)', módulos embutidos)"
 }
 
 # 2. Lint (no mesmo processo: abrir outro powershell.exe com Bypass é bloqueado em alguns ambientes)
@@ -70,6 +86,12 @@ foreach ($v in $versoes) {
     & $lint -Path (ScriptDe $v) -Alvo $v.Alvo
     if ($LASTEXITCODE -ne 0) { throw "Lint reprovou Relatorio-$($v.Id).ps1 no alvo $($v.Alvo)" }
 }
+
+# 2b. Testes dos módulos (também no mesmo processo)
+Etapa '2b. Testes dos módulos'
+$global:LASTEXITCODE = 0
+& (Join-Path $raiz 'tools\Test-Modulos.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Test-Modulos.ps1 reprovou' }
 
 # Certificado (opcional)
 $cert = $null

@@ -15,6 +15,7 @@ namespace RelatorioAD
         const string PadraoSaida = @"C:\Relatorio_AD";
         const string PadraoTerceiros = "Terceir|Tercer|Fornecedor|Externo";
         const string PadraoSensiveis = "^(rh|pessoal|dp|financeiro|contabil|contabilidade|diretoria|juridico|folha)";
+        const string PadraoServico = "svc|servico|serviço|service|sql|backup";
 
         // Ambiente detectado na abertura
         readonly VersaoSO detectada = OsDetector.Detectar();
@@ -27,6 +28,11 @@ namespace RelatorioAD
         TextBox txtCliente, txtResponsavel, txtSaida, txtCaminhos, txtTerceiros, txtSensiveis, txtLog;
         NumericUpDown numProfundidade, numDias;
         CheckBox chkAbrir;
+        // Itens adicionais (feature 001)
+        CheckBox chkComparar, chkContas, chkSenha, chkGpos, chkComputadores;
+        TextBox txtCompararCom, txtPadraoServico;
+        NumericUpDown numDiasServico;
+        Button btnCompararCom;
         Button btnSaida, btnGerar, btnCancelar, btnAbrirRel, btnAbrirPasta, btnExportar;
         ToolStripStatusLabel lblStatus;
         Timer timer;
@@ -40,11 +46,11 @@ namespace RelatorioAD
 
         public MainForm()
         {
-            Text = "RelatorioAD 1.0 — Relatório de acessos do AD";
+            Text = "RelatorioAD 1.1 — Relatório de acessos do AD";
             Font = new Font("Segoe UI", 9F);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(900, 680);
+            ClientSize = new Size(900, 760);
             MinimumSize = new Size(700, 560);
             StartPosition = FormStartPosition.CenterScreen;
 
@@ -127,16 +133,7 @@ namespace RelatorioAD
             btnSaida.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             btnSaida.Margin = new Padding(3, 2, 3, 2);
             btnSaida.Click += delegate { EscolherPasta(); };
-            TableLayoutPanel linhaSaida = new TableLayoutPanel();
-            linhaSaida.Dock = DockStyle.Fill;
-            linhaSaida.AutoSize = true;
-            linhaSaida.Margin = new Padding(0);
-            linhaSaida.ColumnCount = 2;
-            linhaSaida.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            linhaSaida.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            linhaSaida.Controls.Add(txtSaida, 0, 0);
-            linhaSaida.Controls.Add(btnSaida, 1, 0);
-            AddLinha("Pasta de saída:", linhaSaida);
+            AddLinha("Pasta de saída:", LinhaComBotao(txtSaida, btnSaida));
 
             txtCaminhos = NovoTexto("");
             txtCaminhos.Multiline = true;
@@ -159,6 +156,39 @@ namespace RelatorioAD
             chkAbrir.Checked = true;
             chkAbrir.AutoSize = true;
             AddLinha("", chkAbrir);
+
+            // Itens adicionais: todos desmarcados por padrão
+            AddTitulo("Itens adicionais (opcionais)");
+            // Duas linhas fixas, sem quebra automática: o TableLayoutPanel mede um FlowLayoutPanel
+            // com quebra mais alto do que ele fica e sobra um espaço vazio no fim dos parâmetros
+            FlowLayoutPanel opcionais1 = NovoFluxo();
+            opcionais1.WrapContents = false;
+            chkComparar = NovaCaixa("Comparar com o levantamento anterior", opcionais1);
+            chkContas = NovaCaixa("Contas privilegiadas e de risco", opcionais1);
+            chkSenha = NovaCaixa("Política de senha", opcionais1);
+            AddLinha("", opcionais1);
+            FlowLayoutPanel opcionais2 = NovoFluxo();
+            opcionais2.WrapContents = false;
+            chkGpos = NovaCaixa("GPOs", opcionais2);
+            chkComputadores = NovaCaixa("Computadores do domínio", opcionais2);
+            AddLinha("", opcionais2);
+
+            txtCompararCom = NovoTexto("");
+            btnCompararCom = new Button();
+            btnCompararCom.Text = "...";
+            btnCompararCom.Width = 32;
+            btnCompararCom.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+            btnCompararCom.Margin = new Padding(3, 2, 3, 2);
+            btnCompararCom.Click += delegate { EscolherSnapshot(); };
+            AddLinha("Comparar com:", LinhaComBotao(txtCompararCom, btnCompararCom));
+            AddDica("Vazio = levantamento mais recente do mesmo domínio na pasta de saída");
+
+            txtPadraoServico = NovoTexto(PadraoServico);
+            numDiasServico = NovoNumero(1, 3650, 365);
+            AddPar("Contas de serviço:", txtPadraoServico, "Dias senha serviço:", numDiasServico);
+
+            chkComparar.CheckedChanged += delegate { AtualizarOpcionais(); };
+            chkContas.CheckedChanged += delegate { AtualizarOpcionais(); };
 
             grp.Controls.Add(tblParametros);
             principal.Controls.Add(grp, 0, 3);
@@ -208,6 +238,17 @@ namespace RelatorioAD
 
             Controls.Add(principal);
             Controls.Add(status);
+            AtualizarOpcionais();
+        }
+
+        // Os campos extras só valem com a caixa correspondente marcada.
+        // O Bloquear desabilita o tblParametros inteiro e preserva este estado.
+        void AtualizarOpcionais()
+        {
+            txtCompararCom.Enabled = chkComparar.Checked;
+            btnCompararCom.Enabled = chkComparar.Checked;
+            txtPadraoServico.Enabled = chkContas.Checked;
+            numDiasServico.Enabled = chkContas.Checked;
         }
 
         static FlowLayoutPanel NovoFluxo()
@@ -236,6 +277,32 @@ namespace RelatorioAD
             n.Value = valor;
             n.Width = 80;
             return n;
+        }
+
+        static CheckBox NovaCaixa(string texto, Control pai)
+        {
+            CheckBox c = new CheckBox();
+            c.Text = texto;
+            c.Checked = false;
+            c.AutoSize = true;
+            c.Margin = new Padding(3, 3, 12, 3);
+            pai.Controls.Add(c);
+            return c;
+        }
+
+        // Campo de texto que ocupa a largura toda, com o botão "..." à direita
+        static TableLayoutPanel LinhaComBotao(TextBox texto, Button botao)
+        {
+            TableLayoutPanel t = new TableLayoutPanel();
+            t.Dock = DockStyle.Fill;
+            t.AutoSize = true;
+            t.Margin = new Padding(0);
+            t.ColumnCount = 2;
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            t.Controls.Add(texto, 0, 0);
+            t.Controls.Add(botao, 1, 0);
+            return t;
         }
 
         static Button NovoBotao(string texto, Control pai)
@@ -295,6 +362,18 @@ namespace RelatorioAD
             l.Margin = new Padding(3, 0, 3, 4);
             tblParametros.Controls.Add(l, 1, linha);
             tblParametros.SetColumnSpan(l, 3);
+        }
+
+        void AddTitulo(string texto)
+        {
+            int linha = NovaLinha();
+            Label l = new Label();
+            l.Text = texto;
+            l.AutoSize = true;
+            l.Font = new Font(Font, FontStyle.Bold);
+            l.Margin = new Padding(3, 10, 3, 2);
+            tblParametros.Controls.Add(l, 0, linha);
+            tblParametros.SetColumnSpan(l, 4);
         }
 
         // ------------------------------------------------------------------
@@ -358,6 +437,14 @@ namespace RelatorioAD
                 return;
             }
             if (!RegexValida(txtTerceiros, "Padrão de terceiros") || !RegexValida(txtSensiveis, "Pastas sensíveis")) return;
+            if (chkContas.Checked && !RegexValida(txtPadraoServico, "Padrão de contas de serviço")) return;
+            string compararCom = txtCompararCom.Text.Trim();
+            if (chkComparar.Checked && compararCom.Length > 0 && !File.Exists(compararCom))
+            {
+                Erro("O levantamento escolhido em \"Comparar com\" não existe:\n\n" + compararCom);
+                txtCompararCom.Focus();
+                return;
+            }
 
             VersaoSO v = Escolhida;
             string script;
@@ -385,6 +472,22 @@ namespace RelatorioAD
             AddParam(p, "PastasSensiveis", txtSensiveis.Text);
             // -Abrir nunca é passado: quem abre o relatório é o programa
 
+            // Itens adicionais: valor null = switch; desmarcado = nada é passado
+            if (chkComparar.Checked)
+            {
+                p["Comparar"] = null;
+                AddParam(p, "CompararCom", compararCom);
+            }
+            if (chkContas.Checked)
+            {
+                p["ContasDominio"] = null;
+                AddParam(p, "PadraoServico", txtPadraoServico.Text);
+                p["DiasSenhaServico"] = ((int)numDiasServico.Value).ToString();
+            }
+            if (chkSenha.Checked) p["PoliticaSenha"] = null;
+            if (chkGpos.Checked) p["GPOs"] = null;
+            if (chkComputadores.Checked) p["Computadores"] = null;
+
             txtLog.Clear();
             Log("Versão: " + v + " · script: " + script);
             caminhoRelatorio = null;
@@ -405,6 +508,7 @@ namespace RelatorioAD
                 Status("Falhou ao iniciar o PowerShell");
                 return;
             }
+            Log("Comando: powershell.exe " + runner.Argumentos);
 
             executando = true;
             inicio = DateTime.Now;
@@ -561,6 +665,17 @@ namespace RelatorioAD
             }
         }
 
+        void EscolherSnapshot()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = "Levantamento anterior para comparar";
+                d.Filter = "Levantamentos do RelatorioAD (00_Snapshot_*.csv)|00_Snapshot_*.csv|Todos os arquivos (*.*)|*.*";
+                if (Directory.Exists(txtSaida.Text)) d.InitialDirectory = txtSaida.Text;
+                if (d.ShowDialog(this) == DialogResult.OK) txtCompararCom.Text = d.FileName;
+            }
+        }
+
         void ExportarScript()
         {
             VersaoSO v = Escolhida;
@@ -627,6 +742,19 @@ namespace RelatorioAD
         {
             TimeSpan t = DateTime.Now - inicio;
             return ((int)t.TotalMinutes).ToString("00") + ":" + t.Seconds.ToString("00");
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            // Com DPI acima de 100% os campos crescem e o log pode sumir: aumenta a janela até o log
+            // mostrar 6 linhas, sem passar da área de trabalho (em 1024×768 a janela já fica no limite)
+            int falta = 6 * txtLog.Font.Height + 4 - txtLog.ClientSize.Height;
+            if (falta > 0) Height += falta;
+            Rectangle area = Screen.FromControl(this).WorkingArea;
+            if (Height > area.Height) Height = area.Height;
+            CenterToScreen();
+            if (Top < area.Top) Top = area.Top;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

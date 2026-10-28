@@ -28,6 +28,16 @@ param(
     [string]$PadraoTerceiros = 'Terceir|Tercer|Fornecedor|Externo',
     # Regex aplicada ao nome do compartilhamento para destacar pastas sensíveis
     [string]$PastasSensiveis = '^(rh|pessoal|dp|financeiro|contabil|contabilidade|diretoria|juridico|folha)',
+    # Itens adicionais (opcionais) — ver scripts\Modulos.ps1
+    [switch]$Comparar,
+    [string]$CompararCom,
+    [switch]$ContasDominio,
+    [switch]$PoliticaSenha,
+    [switch]$GPOs,
+    [switch]$Computadores,
+    # Regex aplicada ao login e à OU para identificar contas de serviço
+    [string]$PadraoServico = 'svc|servico|serviço|service|sql|backup',
+    [int]$DiasSenhaServico = 365,
     [switch]$Abrir,
     # Versão do Windows Server (gravada pelo build do RelatorioAD)
     [string]$VersaoSO = ''
@@ -53,6 +63,10 @@ function HE([object]$s) { ([string]$s).Replace('&', '&amp;').Replace('<', '&lt;'
 # PS 2.0 não tem [pscustomobject]@{}; a ordem das colunas dos CSVs é fixada com Select-Object
 function NovoObj([hashtable]$h) { New-Object PSObject -Property $h }
 function Curto([string]$n) { if ($n -match '\\') { ($n -split '\\', 2)[1] } else { $n } }
+
+# Itens adicionais: o build.ps1 embute aqui o scripts\Modulos.ps1
+#region MODULOS
+#endregion MODULOS
 
 # =====================================================================
 # 1. USUÁRIOS ATIVOS
@@ -352,6 +366,7 @@ $inativos = @($allUsers | Where-Object { -not $U[$_].Logon -or $U[$_].Logon -lt 
               Sort-Object @{e={ if ($U[$_].Logon) { $U[$_].Logon } else { [datetime]::MinValue } }})
 $inaSet = @{}; foreach ($l in @($inativos)) { $inaSet[$l] = 1 }
 $nunca = @($allUsers | Where-Object { $U[$_].Nunca })
+$MOD = Invoke-Modulos
 
 # Pastas abertas para todos (NTFS) e compartilhamentos "Todos: controle total"
 $abertas = @(); $todosFull = @()
@@ -562,7 +577,7 @@ $dataTxt = $hoje.ToString('dd/MM/yyyy')
 A "<!doctype html><html lang=""pt-BR""><head><meta charset=""utf-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1"">"
 A "<title>Relatório de Acessos — $(HE $Cliente)</title>"
 A '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">'
-A "<style>$css</style></head><body>"
+A "<style>$css$(CssModulos $MOD)</style></head><body>"
 
 # ---- capa ----
 $escopo = if ($Caminhos) { "Pastas selecionadas em <code>$(HE $env:COMPUTERNAME)</code>" } else { "$nSh pastas compartilhadas em <code>$(HE $env:COMPUTERNAME)</code>" }
@@ -576,7 +591,7 @@ A @"
 <div><span>Responsável</span>$(HE $Responsavel)</div></div>
 </div></header>
 <nav class="toc"><div class="wrap">
-<a href="#resumo">1. Resumo</a><a href="#atencao">2. Pontos de atenção</a><a href="#matriz">3. Matriz de acessos</a><a href="#pastas">4. Detalhe por pasta</a><a href="#usuarios">5. Usuários ativos</a>
+<a href="#resumo">1. Resumo</a><a href="#atencao">2. Pontos de atenção</a><a href="#matriz">3. Matriz de acessos</a><a href="#pastas">4. Detalhe por pasta</a><a href="#usuarios">5. Usuários ativos</a>$(NavModulos $MOD)
 </div></nav><main class="wrap">
 "@
 
@@ -652,6 +667,7 @@ if ($abertas.Count) {
     A (Card 'baixa' 'Pastas abertas para todos os usuários' "<p>Confirmar que o conteúdo dessas pastas pode ser visto por qualquer pessoa da empresa:</p><ul>$li</ul>")
     $nCards++
 }
+foreach ($c in @(CardsModulos $MOD)) { A $c; $nCards++ }
 if (-not $nCards) { A '<p class="lead">Nenhum ponto de atenção identificado pelas regras automáticas.</p>' }
 A '</div></section>'
 
@@ -739,10 +755,11 @@ foreach ($l in @($ordUsers)) {
     A "<tr><td>$(HE $usr.Nome)</td><td class=""mono"">$(HE $l)</td><td>$(HE $usr.Setor)</td><td class=""grps"">$grp</td><td class=""num"">$(DT $usr.Logon)</td><td class=""num"">$np</td><td>$($obs -join ' ')</td></tr>"
 }
 A '</tbody></table></section>'
+A (SecoesModulos $MOD)
 
 # ---- metodologia ----
 A @"
-<section id="recom"><div class="method"><h4>Como o levantamento foi feito</h4><p>Script PowerShell executado no servidor <code>$(HE $env:COMPUTERNAME)</code>$(if ($VersaoSO) { " (Windows Server $(HE $VersaoSO))" }) em $dataTxt, lendo o AD (contas habilitadas e grupos, com expansão recursiva) e as ACLs de $($pastasComAcl.Count) pastas com permissões próprias, até $Profundidade nível(is) abaixo de cada compartilhamento. Contas de sistema (SYSTEM, CREATOR OWNER) foram desconsideradas. O “último logon” vem do atributo replicado do AD e pode ter alguns dias de atraso.$(if ($erros.Count) { " $($erros.Count) pasta(s) não puderam ser lidas — ver arquivo 99_Erros_Acesso." })</p></div>
+<section id="recom"><div class="method"><h4>Como o levantamento foi feito</h4><p>Script PowerShell executado no servidor <code>$(HE $env:COMPUTERNAME)</code>$(if ($VersaoSO) { " (Windows Server $(HE $VersaoSO))" }) em $dataTxt, lendo o AD (contas habilitadas e grupos, com expansão recursiva) e as ACLs de $($pastasComAcl.Count) pastas com permissões próprias, até $Profundidade nível(is) abaixo de cada compartilhamento. Contas de sistema (SYSTEM, CREATOR OWNER) foram desconsideradas. O “último logon” vem do atributo replicado do AD e pode ter alguns dias de atraso.$(if ($erros.Count) { " $($erros.Count) pasta(s) não puderam ser lidas — ver arquivo 99_Erros_Acesso." })$(MetodoModulos $MOD)</p></div>
 </section></main>
 <footer class="wrap foot">$(HE $Responsavel) · Relatório gerado em $dataTxt · Documento de uso interno do cliente</footer>
 "@

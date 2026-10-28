@@ -50,6 +50,9 @@ namespace RelatorioAD
         volatile string resumo;
         volatile bool cancelado;
 
+        // Argumentos do powershell.exe da última execução (registrados no log)
+        public string Argumentos { get; private set; }
+
         public void Iniciar(string scriptPath, IDictionary<string, string> parametros)
         {
             caminhoRelatorio = null;
@@ -59,14 +62,19 @@ namespace RelatorioAD
             StringBuilder args = new StringBuilder("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ");
             args.Append(Quote(scriptPath));
             foreach (KeyValuePair<string, string> p in parametros)
-                args.Append(" -").Append(p.Key).Append(' ').Append(Quote(p.Value));
+            {
+                // valor null = switch
+                args.Append(" -").Append(p.Key);
+                if (p.Value != null) args.Append(' ').Append(Quote(p.Value));
+            }
+            Argumentos = args.ToString();
 
             Encoding oem = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
             string sys = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
 
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = Path.Combine(sys, @"System32\WindowsPowerShell\v1.0\powershell.exe");
-            psi.Arguments = args.ToString();
+            psi.Arguments = Argumentos;
             psi.WorkingDirectory = Path.GetDirectoryName(scriptPath);
             psi.UseShellExecute = false;
             psi.RedirectStandardOutput = true;
